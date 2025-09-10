@@ -11,22 +11,27 @@ export default function Index() {
   const { setUserDetail } = useContext(UserDetailContext);
   const router = useRouter();
 
-  useEffect(() => {
-    // set up listener once
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const result = await getDoc(doc(db, "users", user.email));
-        setUserDetail(result.data());
-        router.replace("/(tabs)/home"); // send logged-in users to tabs (or home)
-      } else {
-        // if logged out → just stay on landing screen
-        setUserDetail(null);
-      }
-    });
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      const result = await getDoc(doc(db, "users", user.email));
 
-    // cleanup on unmount
-    return () => unsubscribe();
-  }, []);
+      // Combine Firestore data + uid
+      setUserDetail({
+        uid: user.uid,
+        email: user.email,
+        ...result.data(),
+      });
+
+      router.replace("/(tabs)/home");
+    } else {
+      setUserDetail(null);
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
+
 
   return (
     <View style={{ flex: 1, backgroundColor: Colours.WHITE }}>

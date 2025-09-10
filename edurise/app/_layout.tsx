@@ -2,7 +2,7 @@ import { Stack } from "expo-router";
 import { useFonts } from "expo-font";
 import { UserDetailContext } from "./../context/UserDetailContext";
 import { useState } from "react";
-
+import moduleDetail from "./moduleDetail/index"
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     'outfit': require('./../assets/fonts/Outfit-Regular.ttf'),
@@ -18,7 +18,11 @@ export default function RootLayout() {
   return (
     <UserDetailContext.Provider value={{ userDetail, setUserDetail }}>
       <Stack screenOptions={{ headerShown: false }}>
-        {/* Your screens go here */}
+          <Stack.Screen name="index" />
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="addCourse" />
+        <Stack.Screen name="moduleDetail" />
       </Stack>
     </UserDetailContext.Provider>
   );

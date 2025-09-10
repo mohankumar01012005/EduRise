@@ -42,7 +42,6 @@ export async function generateCourseTitles(userInput) {
   }
 }
 
-
 export async function generateCourseModule(topic) {
   try {
     const prompt = `
@@ -100,6 +99,69 @@ export async function generateCourseModule(topic) {
       formulas: [],
       youtubeLink: "https://www.youtube.com/results?search_query=" + encodeURIComponent(topic),
       resourceLink: "https://en.wikipedia.org/wiki/" + encodeURIComponent(topic)
+    };
+  }
+}
+
+export async function generateCourseWithModules(courseTitle, modules) {
+  try {
+    const prompt = `
+    Create a comprehensive course structure for: ${courseTitle}
+    - This course will have the following modules: ${modules.join(", ")}
+    - Generate a kid-friendly overall description for the course
+    - Provide a real-life example of how this course knowledge is applied
+    - Include any relevant formulas that span across modules (if applicable)
+    
+    Return response in JSON format with these keys:
+    {
+      "title": "string",
+      "description": "string",
+      "overview": "string",
+      "modules": ["array of module names"],
+      "formulas": ["string array"],
+      "youtubeLink": "string",
+      "resourceLink": "string"
+    }
+    - Do not add any plain text in output
+    `;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: prompt,
+    });
+
+    let text = response.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    text = text.replace(/```json|```/g, "").trim();
+
+    console.log("🔹 Raw AI Course Response:", text);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      console.error("❌ JSON Parse Error:", err.message);
+      return {
+        title: courseTitle,
+        description: `A comprehensive course about ${courseTitle}`,
+        overview: "This course covers various aspects of the subject in an engaging way",
+        modules: modules,
+        formulas: [],
+        youtubeLink: "https://www.youtube.com/results?search_query=" + encodeURIComponent(courseTitle),
+        resourceLink: "https://en.wikipedia.org/wiki/" + encodeURIComponent(courseTitle)
+      };
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error("❌ AI Error (generateCourseWithModules):", error);
+    return {
+      title: courseTitle,
+      description: `A comprehensive course about ${courseTitle}`,
+      overview: "This course covers various aspects of the subject in an engaging way",
+      modules: modules,
+      formulas: [],
+      youtubeLink: "https://www.youtube.com/results?search_query=" + encodeURIComponent(courseTitle),
+      resourceLink: "https://en.wikipedia.org/wiki/" + encodeURIComponent(courseTitle)
     };
   }
 }

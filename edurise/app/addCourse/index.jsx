@@ -12,7 +12,7 @@ import {
   Platform
 } from "react-native";
 import { UserDetailContext } from "../../context/UserDetailContext";
-import { generateCourseTitles, generateCourseModule } from "../../config/AiModel";
+import { generateCourseTitles, generateCourseModule, generateCourseWithModules } from "../../config/AiModel";
 import { db } from "../../config/firebaseConfig";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "expo-router";
@@ -88,9 +88,9 @@ export default function CourseGenerator() {
     }
   };
 
-  const handleCreateCourses = async () => {
+  const handleCreateCourse = async () => {
     if (selectedCourses.length === 0) {
-      setError("Please select at least one course to create");
+      setError("Please select at least one module to create a course");
       return;
     }
 
@@ -98,29 +98,32 @@ export default function CourseGenerator() {
     setError("");
 
     try {
-      for (const courseTitle of selectedCourses) {
-        // Generate course module using AI
-        const courseModule = await generateCourseModule(courseTitle);
-        
-        // Save to Firestore
-        await addDoc(collection(db, "users", userDetail.uid, "courses"), {
-          ...courseModule,
-          createdAt: serverTimestamp(),
-          userId: userDetail.uid
-        });
-      }
+      // First generate the course structure
+      const courseStructure = await generateCourseWithModules(input, selectedCourses);
+      
+      // Then generate detailed modules for each selected topic
+      const modulePromises = selectedCourses.map(topic => generateCourseModule(topic));
+      const modules = await Promise.all(modulePromises);
+      
+      // Save to Firestore
+      await addDoc(collection(db, "users", userDetail.uid, "courses"), {
+        ...courseStructure,
+        modules: modules,
+        createdAt: serverTimestamp(),
+        userId: userDetail.uid
+      });
 
-      Alert.alert("Success", "Courses created successfully!");
-     router.replace('/(tabs)/home')
+      Alert.alert("Success", "Course created successfully!");
+      router.replace('/(tabs)/home');
     } catch (error) {
-      console.error("❌ Error creating courses:", error);
-      setError("Failed to create courses. Please try again.");
+      console.error("❌ Error creating course:", error);
+      setError("Failed to create course. Please try again.");
     } finally {
       setGenerating(false);
     }
   };
 
- return (
+  return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#f9fafb" }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -146,7 +149,7 @@ export default function CourseGenerator() {
             <View style={styles.cardContent}>
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>
-                  Enter any topic that you want to learn
+                  Enter the main course topic
                 </Text>
                 <View style={styles.inputWrapper}>
                   <TextInput
@@ -165,7 +168,7 @@ export default function CourseGenerator() {
               </View>
 
               <Button
-                text={loading ? "Generating Topics..." : "Generate Topics"}
+                text={loading ? "Generating Modules..." : "Generate Modules"}
                 onPress={handleGenerateTitles}
                 loading={loading}
                 disabled={loading || !input.trim()}
@@ -179,14 +182,17 @@ export default function CourseGenerator() {
             </View>
           </View>
 
-          {/* Course Topics */}
+          {/* Course Modules */}
           {courses.length > 0 && (
             <View style={styles.card}>
               <View style={styles.cardContent}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionIcon}>📚</Text>
-                  <Text style={styles.sectionTitle}>Generated Course Topics</Text>
+                  <Text style={styles.sectionTitle}>Generated Course Modules</Text>
                 </View>
+                <Text style={styles.moduleSubtitle}>
+                  Select the modules you want to include in your "{input}" course
+                </Text>
                 {courses.map((course, index) => (
                   <TouchableOpacity
                     key={index}
@@ -216,20 +222,17 @@ export default function CourseGenerator() {
                   <View style={styles.selectedContainer}>
                     <View style={styles.selectedCount}>
                       <Text style={styles.selectedCountText}>
-                        {selectedCourses.length} topic
-                        {selectedCourses.length > 1 ? "s" : ""} selected
+                        {selectedCourses.length} module{selectedCourses.length > 1 ? 's' : ''} selected for your course
                       </Text>
                     </View>
 
                     <Button
                       text={
                         generating
-                          ? "Creating Courses..."
-                          : `Create ${selectedCourses.length} Course${
-                              selectedCourses.length > 1 ? "s" : ""
-                            }`
+                          ? "Creating Course..."
+                          : "Generate Course"
                       }
-                      onPress={handleCreateCourses}
+                      onPress={handleCreateCourse}
                       loading={generating}
                     />
                   </View>
@@ -244,23 +247,12 @@ export default function CourseGenerator() {
 }
 
 const styles = StyleSheet.create({
-   scrollContainer: {
+  scrollContainer: {
     flexGrow: 1,
     padding: 16,
   },
   content: {
     flex: 1,
-    maxWidth: 500,
-    alignSelf: "center",
-    width: "100%",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#f9fafb",
-  },
-  content: {
-    flex: 1,
-    padding: 16,
     maxWidth: 500,
     alignSelf: "center",
     width: "100%",
@@ -281,9 +273,6 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: 28,
     fontWeight: "bold",
-    backgroundGradient: "to-r",
-    gradientFrom: "#2563eb",
-    gradientTo: "#60a5fa",
     color: "#2563eb",
   },
   subtitle: {
@@ -336,36 +325,6 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
     marginTop: 4,
   },
-  button: {
-    backgroundColor: "#2563eb",
-    borderRadius: 8,
-    padding: 12,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  loader: {
-    marginRight: 8,
-  },
   errorContainer: {
     backgroundColor: "#fef2f2",
     borderWidth: 1,
@@ -392,9 +351,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#374151",
   },
-  coursesContainer: {
-    maxHeight: 300,
-    marginBottom: 20,
+  moduleSubtitle: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginBottom: 16,
+    fontStyle: "italic",
   },
   courseItem: {
     borderWidth: 2,
