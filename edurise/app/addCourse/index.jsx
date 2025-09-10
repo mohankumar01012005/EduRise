@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import {
   View,
   Text,
@@ -6,35 +6,29 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  StyleSheet
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
-
-// Mock function for demonstration - replace with your actual AI integration
-const generateCourseTitles = async (input) => {
-  // Replace this with your actual AI model integration
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        course_titles: [
-          `Advanced ${input} Fundamentals`,
-          `${input} for Beginners`,
-          `Complete ${input} Masterclass`,
-          `${input} Best Practices`,
-          `Modern ${input} Techniques`
-        ]
-      });
-    }, 2000);
-  });
-};
+import { UserDetailContext } from "../../context/UserDetailContext";
+import { generateCourseTitles, generateCourseModule } from "../../config/AiModel";
+import { db } from "../../config/firebaseConfig";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { useRouter } from "expo-router";
+import Button from "../../components/Shared/Button";
 
 export default function CourseGenerator() {
+  const { userDetail } = useContext(UserDetailContext);
+  const router = useRouter();
   const [input, setInput] = useState("");
   const [courses, setCourses] = useState([]);
   const [selectedCourses, setSelectedCourses] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
-  const handleGenerate = async () => {
+  const handleGenerateTitles = async () => {
     if (!input.trim()) {
       setError("Please enter a topic or description");
       return;
@@ -94,101 +88,121 @@ export default function CourseGenerator() {
     }
   };
 
-  const handleCreateCourse = () => {
+  const handleCreateCourses = async () => {
     if (selectedCourses.length === 0) {
       setError("Please select at least one course to create");
       return;
     }
-    // Add your course creation logic here
-    console.log("Creating courses:", selectedCourses);
+
+    setGenerating(true);
+    setError("");
+
+    try {
+      for (const courseTitle of selectedCourses) {
+        // Generate course module using AI
+        const courseModule = await generateCourseModule(courseTitle);
+        
+        // Save to Firestore
+        await addDoc(collection(db, "users", userDetail.uid, "courses"), {
+          ...courseModule,
+          createdAt: serverTimestamp(),
+          userId: userDetail.uid
+        });
+      }
+
+      Alert.alert("Success", "Courses created successfully!");
+     router.replace('/(tabs)/home')
+    } catch (error) {
+      console.error("❌ Error creating courses:", error);
+      setError("Failed to create courses. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerIconContainer}>
-            <Text style={styles.headerIcon}>📚</Text>
-            <Text style={styles.headerText}>Course Generator</Text>
-          </View>
-          <Text style={styles.subtitle}>
-            Generate personalized course topics powered by AI
-          </Text>
-        </View>
-
-        {/* Input Section */}
-        <View style={styles.card}>
-          <View style={styles.cardContent}>
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>
-                Enter any topic that you want to learn
-              </Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., Python, Java, 10th class maths, web development, data science..."
-                  placeholderTextColor="#9ca3af"
-                  value={input}
-                  onChangeText={setInput}
-                  onSubmitEditing={() => !loading && handleGenerate()}
-                />
-                <Text style={styles.sparklesIcon}>✨</Text>
-              </View>
-              <Text style={styles.exampleText}>
-                Examples: Python, Java, 10th class maths, React development
-              </Text>
+ return (
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: "#f9fafb" }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.content}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerIconContainer}>
+              <Text style={styles.headerIcon}>📚</Text>
+              <Text style={styles.headerText}>Course Generator</Text>
             </View>
-            
-            <TouchableOpacity
-              style={[styles.button, (loading || !input.trim()) && styles.buttonDisabled]}
-              onPress={handleGenerate}
-              disabled={loading || !input.trim()}
-            >
-              {loading ? (
-                <View style={styles.buttonContent}>
-                  <ActivityIndicator color="#fff" style={styles.loader} />
-                  <Text style={styles.buttonText}>Generating Topics...</Text>
-                </View>
-              ) : (
-                <View style={styles.buttonContent}>
-                  <Text style={styles.buttonIcon}>✨</Text>
-                  <Text style={styles.buttonText}>Generate Topics</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            {error ? (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
+            <Text style={styles.subtitle}>
+              Generate personalized course topics powered by AI
+            </Text>
           </View>
-        </View>
 
-        {/* Course Topics */}
-        {courses.length > 0 && (
+          {/* Input Section */}
           <View style={styles.card}>
             <View style={styles.cardContent}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionIcon}>📚</Text>
-                <Text style={styles.sectionTitle}>Generated Course Topics</Text>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>
+                  Enter any topic that you want to learn
+                </Text>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g., Python, Java, 10th class maths, web development, data science..."
+                    placeholderTextColor="#9ca3af"
+                    value={input}
+                    onChangeText={setInput}
+                    onSubmitEditing={() => !loading && handleGenerateTitles()}
+                  />
+                  <Text style={styles.sparklesIcon}>✨</Text>
+                </View>
+                <Text style={styles.exampleText}>
+                  Examples: Python, Java, 10th class maths, React development
+                </Text>
               </View>
-              <ScrollView style={styles.coursesContainer}>
+
+              <Button
+                text={loading ? "Generating Topics..." : "Generate Topics"}
+                onPress={handleGenerateTitles}
+                loading={loading}
+                disabled={loading || !input.trim()}
+              />
+
+              {error ? (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          {/* Course Topics */}
+          {courses.length > 0 && (
+            <View style={styles.card}>
+              <View style={styles.cardContent}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionIcon}>📚</Text>
+                  <Text style={styles.sectionTitle}>Generated Course Topics</Text>
+                </View>
                 {courses.map((course, index) => (
                   <TouchableOpacity
                     key={index}
                     style={[
                       styles.courseItem,
-                      selectedCourses.includes(course) && styles.courseItemSelected
+                      selectedCourses.includes(course) && styles.courseItemSelected,
                     ]}
                     onPress={() => toggleSelectCourse(course)}
                   >
                     <View style={styles.courseContent}>
-                      <Text style={[
-                        styles.courseText,
-                        selectedCourses.includes(course) && styles.courseTextSelected
-                      ]}>
+                      <Text
+                        style={[
+                          styles.courseText,
+                          selectedCourses.includes(course) && styles.courseTextSelected,
+                        ]}
+                      >
                         {course}
                       </Text>
                       {selectedCourses.includes(course) && (
@@ -197,38 +211,49 @@ export default function CourseGenerator() {
                     </View>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
-              
-              {selectedCourses.length > 0 && (
-                <View style={styles.selectedContainer}>
-                  <View style={styles.selectedCount}>
-                    <Text style={styles.selectedCountText}>
-                      {selectedCourses.length} topic{selectedCourses.length > 1 ? 's' : ''} selected
-                    </Text>
-                  </View>
-                  
-                  <TouchableOpacity
-                    style={styles.button}
-                    onPress={handleCreateCourse}
-                  >
-                    <View style={styles.buttonContent}>
-                      <Text style={styles.buttonIcon}>📚</Text>
-                      <Text style={styles.buttonText}>
-                        Create Course{selectedCourses.length > 1 ? 's' : ''}
+
+                {selectedCourses.length > 0 && (
+                  <View style={styles.selectedContainer}>
+                    <View style={styles.selectedCount}>
+                      <Text style={styles.selectedCountText}>
+                        {selectedCourses.length} topic
+                        {selectedCourses.length > 1 ? "s" : ""} selected
                       </Text>
                     </View>
-                  </TouchableOpacity>
-                </View>
-              )}
+
+                    <Button
+                      text={
+                        generating
+                          ? "Creating Courses..."
+                          : `Create ${selectedCourses.length} Course${
+                              selectedCourses.length > 1 ? "s" : ""
+                            }`
+                      }
+                      onPress={handleCreateCourses}
+                      loading={generating}
+                    />
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
-        )}
-      </View>
-    </View>
+          )}
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+   scrollContainer: {
+    flexGrow: 1,
+    padding: 16,
+  },
+  content: {
+    flex: 1,
+    maxWidth: 500,
+    alignSelf: "center",
+    width: "100%",
+  },
   container: {
     flex: 1,
     backgroundColor: "#f9fafb",
